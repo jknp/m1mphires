@@ -1,5 +1,5 @@
-
-#Make a directory, install all required packages 
+##############
+##Make a directory, install all required packages 
 #(clusterProfiler and enrichplot might need separate dependencies)
 setwd("~/RNAseq/2020_P9_LNMph_v3/")
 
@@ -36,7 +36,8 @@ norm_10m <- data.frame(read.delim(paste0(path, "GCF/genecounts_normalized_10mil.
 counts <- data.frame(read.delim(paste0(path, "GCF/genecounts.txt"), 
                                 header = T, sep = "\t", strip.white = TRUE))
 
-#Function definitions
+#########################
+##Function definitions
 #DESEq2 normalization function
 normalizeWithDESeq2 = function(mat){ #Credits: Gergana Bounova    
   require(DESeq2) || stop("Need package \"DESeq2\" to perform this normalization.")
@@ -149,3 +150,88 @@ export_glist = function(resinput,cfpadj, cf_l2fc){
   
   return(sel)
 }
+
+##########
+##Read quality control plots
+#loading bamstats, presorted to match index key
+bamstats <- data.frame(read.delim(paste0(path_gcf, "bamstats.txt"),
+                               header = T, sep = "\t", strip.white = TRUE),stringsAsFactors = T)
+colnames(bamstats) <- c("sample", "readno", "unmapreadno", "fmapped", "nonprim_alignmentsno", "pair", "properpair", "singleread", "fproper", "dups", "fdups", "failed","mapq5no","fmapq5")
+bamstats <- bamstats[,-5]
+
+bamstats$key <- index$sample
+bamstats$biorep <- index$biorep
+
+#loading gene_exp_stats
+expstats <- data.frame(read.delim(paste0(path_gcf, "gene_expstats.txt"),
+                               header = T, sep = "\t", strip.white = TRUE),stringsAsFactors = T)
+expstats$key <- index$sample
+expstats$biorep <- index$biorep
+
+#loading strandstats
+strstats <- data.frame(read.delim(paste0(path_gcf, "strandedstats.txt"),
+                               header = T, sep = "\t", strip.white = TRUE),stringsAsFactors = T)
+strstats$key <- index$sample
+strstats$biorep <- index$biorep
+
+#plots
+q1 = ggplot(bamstats, aes(singleread, key, fill = biorep)) + geom_bar(stat = "identity") + theme_bw() +
+  ylab("") + xlab("Single mapped reads")
+
+q2 = ggplot(bamstats, aes(fmapq5, key, fill = biorep)) + geom_bar(stat = "identity") + theme_bw() +
+  ylab("") + xlab("Fraction mapq >= 5")
+
+q3 = ggplot(expstats, aes(X.mtRNA, key, fill = biorep)) + geom_bar(stat = "identity") + theme_bw() +
+  ylab("") + xlab("% mitochondrial RNA")
+
+q4 = ggplot(strstats, aes(reads_on_same_strand, key, fill = biorep)) + geom_bar(stat = "identity") + theme_bw() +
+  ylab("") + xlab("Fraction on same strand")
+
+
+#combining plots
+p1 = ggarrange(q1,q3, q2, q4, nrow =2, ncol =2, common.legend = T, legend = "bottom")
+annotate_figure(p1, top = text_grob("Read number, quality, %mito, reads on same strand", 
+               color = "black", size = 14))
+ggsave(paste0(path_plot,"221021_QCplots.png"))
+ggsave(paste0(path_plot,"221021_QCplots.pdf"))
+
+#################
+##Dataframe pre-processing, adding gene annotations etc in one file
+
+#Split the countdata in a table with just the (normalized) readcounts and the gene annotation for ENSG and HGNC:
+counts_only <- norm_10m[,2:13]
+annot <- data.frame(norm_10m$ensembl_gene_id)
+annot$symbol <- mapIds(org.Hs.eg.db, keys=annot$norm_10m.ensembl_gene_id, keytype = "ENSEMBL", column="SYMBOL")
+colnames(annot)[1] <- "gene"
+
+annot$name <- paste0(annot$gene, "_", annot$symbol)
+colnames(annot) <- c("gene", "symbol", "name")
+#manual save in 221021_dendrogram.png
+
+
+####################
+##Clustered heatmap
+
+#get the standard deviation of the expression per gene and order by sd
+most_variable_counts <- data.frame(counts_only)
+most_variable_counts$sd <- apply(counts_only,1,sd)
+
+#Add annotation, but remove NO_GENE_NAME for these heatmap plots >> 41389 genes from 61806 total remain.
+most_variable_counts$name <- annot$name
+most_variable_counts <- most_variable_counts[with(most_variable_counts,order(-sd)),]
+sel <- most_variable_counts[with(most_variable_counts,order(-sd)),]
+
+#some data class manipulations for aheatmap
+mvc = as.matrix(sel[,-14])
+row.names(mvc) <- most_variable_counts$name
+class(mvc) = "numeric"
+
+#visualize the top50 most variable genes
+topno = 50
+aheatmap(
+  mvc[1:topno, (1:ncol(mvc)-1)],
+  labRow = sel$gene[1:topno],
+  labCol = index[,"sample"],
+  annCol = index[,c("biorep","techrep", "exposure")] #Do these genes correlate with any of the clinical variables?
+)
+#######################
