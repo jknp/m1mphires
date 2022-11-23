@@ -235,3 +235,55 @@ aheatmap(
   annCol = index[,c("biorep","techrep", "exposure")] #Do these genes correlate with any of the clinical variables?
 )
 #######################
+
+
+#DESeq2 differential gene analysis for whole experiment
+#preparing from raw counts
+counts_only_raw <- counts[,2:13]
+.rowNamesDF(counts_only_raw, make.names = T) <- annot$gene
+
+Adesel <- counts_only_raw[,c(1:3,4:6)]
+Bdesel <- counts_only_raw[,c(1:3,7:9)]
+Cdesel <- counts_only_raw[,c(1:3,10:12)]
+
+ABCdesel <- counts_only_raw[,1:12]
+
+### For demonstration purposes this is the code specifically tailored to resA
+##Comparing wildtype to A9
+cds <- DESeqDataSetFromMatrix(Adesel, index[which(index$compA == 1),], design = ~biorep)
+dds <- estimateSizeFactors(cds)
+normalized_df <- counts(dds, normalized=TRUE)
+normalized_df.log <- log2(normalized_df+1)
+
+##
+#Create an object for DESeq and run the differential expression analysis:
+dds<-DESeqDataSetFromMatrix(
+  countData=Adesel, #the table with the original gene expression values
+  colData = index[which(index$compA ==1),], #the table with sample annotation
+  design = ~biorep) #study design
+
+dds<-DESeq(dds) #run the differential expression analysis
+resA<-results(dds) #get the results
+resA$gene <- rownames(resA)
+
+selA <- resA
+selA$symbol <- annot[match(annot$gene,selA$gene),2]
+selA$name <- annot[match(annot$gene,selA$gene),3]
+
+## Plotting volcano plot with Enhanced Volcano
+#Plot only genes with a HGNC symbol (reduces amount of dots)
+selA <- selA[!is.na(selA$symbol),]
+
+a9v = EnhancedVolcano(selA, 
+  lab = selA$symbol,
+  x = 'log2FoldChange',
+  y = 'pvalue',
+  ylab = '-Log10 padj',
+  axisLabSize = 12,
+  title = 'wt versus R9 biorep A',
+  pCutoff = 10^-5,
+  FCcutoff = 1.5,
+  pointSize = 1.0,
+  labSize = 2.5,
+  legendPosition = 'none',
+  gridlines.minor = F)
