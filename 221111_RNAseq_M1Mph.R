@@ -287,3 +287,39 @@ a9v = EnhancedVolcano(selA,
   labSize = 2.5,
   legendPosition = 'none',
   gridlines.minor = F)
+
+###DESeq2 for ResB clones
+##Comparing wildtype to B9
+cds <- DESeqDataSetFromMatrix(Bdesel, index[which(index$compB == 1),], design = ~biorep)
+dds <- estimateSizeFactors(cds)
+normalized_df <- counts(dds, normalized=TRUE)
+normalized_df.log <- log2(normalized_df+1)
+
+#Create an object for DESeq and run the differential expression analysis:
+
+dds<-DESeqDataSetFromMatrix(
+  countData=Bdesel, #the table with the original gene expression values
+  colData = index[which(index$compB ==1),], #the table with sample annotation
+  design = ~biorep) #study design
+
+dds<-DESeq(dds) #run the differential expression analysis
+resB<-results(dds) #get the results
+resB$gene<- rownames(resB)
+
+##Comparing wildtype to C9
+cds <- DESeqDataSetFromMatrix(Cdesel, index[which(index$compC == 1),], design = ~biorep)
+dds <- estimateSizeFactors(cds)
+normalized_df <- counts(dds, normalized=TRUE)
+normalized_df.log <- log2(normalized_df+1)
+
+#Create an object for DESeq and run the differential expression analysis:
+
+dds<-DESeqDataSetFromMatrix(
+  countData=Cdesel, #the table with the original gene expression values
+  colData = index[which(index$compC ==1),], #the table with sample annotation
+  design = ~biorep) #study design
+
+dds<-DESeq(dds) #run the differential expression analysis
+resC<-results(dds) #get the results
+resC$gene <- rownames(resC)
+
